@@ -16,6 +16,9 @@ window.APP_CONFIG = {
   // Permiso de Microsoft Graph. Si TI usa el permiso restringido a un sitio, cambiar a "Sites.Selected".
   graphScope: "Sites.ReadWrite.All",
 
+  // Archivo de datos publicado con la página (se usa mientras no haya conexión a SharePoint)
+  dataUrl: "datos.json",
+
   // Cada cuántos segundos se buscan cambios hechos por la otra persona
   refreshSeconds: 30
 };

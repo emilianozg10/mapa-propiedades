@@ -207,7 +207,9 @@ button{cursor:pointer}
 <script>
 "use strict";
 const CFG = window.APP_CONFIG || {};
-const DEMO = !CFG.clientId || new URLSearchParams(location.search).has("demo");
+const QS = new URLSearchParams(location.search);
+const STATIC = !CFG.clientId && !!CFG.dataUrl && !QS.has("demo");
+const DEMO = !CFG.clientId && !STATIC;
 
 /* ───────── Utilidades ───────── */
 const $ = s => document.querySelector(s);
@@ -375,7 +377,18 @@ const DemoStore = {
   async uploadPhoto(p, blob){ this.photos.set(p._id, URL.createObjectURL(blob)); },
   user(){ return "Demostración"; }
 };
-const DB = DEMO ? DemoStore : GraphStore;
+/* Datos publicados junto con la página (solo consulta) */
+const StaticStore = {
+  readOnly: true,
+  async init(){ return true; }, async connect(){}, canPhotos(){ return false; },
+  async load(){
+    const r = await fetch(CFG.dataUrl + "?v=" + Date.now()); if (!r.ok) throw new Error("No se encontró el archivo de datos.");
+    return (await r.json()).map((p, i) => ({ _id: p._id || "p" + i, ...p }));
+  },
+  photoUrl(p){ return p.foto || null; },
+  user(){ return ""; }
+};
+const DB = STATIC ? StaticStore : DEMO ? DemoStore : GraphStore;
 
 /* ───────── Estado ───────── */
 const S = { props: new Map(), view: "list", sel: null, q: "", filter: "all", placing: null, draft: null, loaded: false, busy: false };
@@ -481,7 +494,7 @@ function renderList(){
   document.querySelectorAll("#filters button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.f === S.filter)));
   const list = visible(), el = $("#list");
   if (!S.loaded){ el.innerHTML = `<div class="empty"><p>Cargando propiedades…</p></div>`; return; }
-  if (!S.props.size){ el.innerHTML = `<div class="empty"><h3>Aún no hay propiedades</h3><p>Agrega la primera con el botón «Agregar» y un clic en el mapa.</p></div>`; return; }
+  if (!S.props.size){ el.innerHTML = `<div class="empty"><h3>Aún no hay propiedades</h3><p>${DB.readOnly ? "No hay propiedades en el archivo de datos." : "Agrega la primera con el botón «Agregar» y un clic en el mapa."}</p></div>`; return; }
   if (!list.length){ el.innerHTML = `<div class="empty"><p>Ninguna propiedad coincide con la búsqueda.</p></div>`; return; }
   el.innerHTML = list.map(p => `
     <button class="row" type="button" data-id="${esc(p._id)}">
@@ -519,15 +532,14 @@ function renderDetail(){
           <div class="full"><dt>Calle y número</dt><dd>${esc(p.direccion || "—")}</dd></div>
         </dl>
         ${p.notas ? `<div class="notes"><h5>Observaciones</h5><p>${esc(p.notas)}</p></div>` : ""}
-        ${geo && p.precision && p.precision !== "exacta" ? `<div class="aprox">Ubicación aproximada (a nivel ${esc(p.precision)}). Usa Editar → Mover pin para colocarla exacta.</div>` : ""}
+        ${geo && p.precision && p.precision !== "exacta" ? `<div class="aprox">Ubicación aproximada (a nivel ${esc(p.precision)}). ${DB.readOnly ? "" : " Usa Editar → Mover pin para colocarla exacta."}</div>` : ""}
         <div class="geo">${geo ? `<span class="mono">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</span><a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}" target="_blank" rel="noopener">Google Maps ↗</a>` : "<span>Esta propiedad no tiene pin en el mapa.</span>"}</div>
         ${mod ? `<div class="meta">${mod}</div>` : ""}
       </div>
-      <div class="dfoot"><button class="btn primary" type="button" id="edit">Editar</button><button class="btn danger" type="button" id="del">Eliminar</button></div>
+      ${DB.readOnly ? "" : `<div class="dfoot"><button class="btn primary" type="button" id="edit">Editar</button><button class="btn danger" type="button" id="del">Eliminar</button></div>`}
     </div>`;
   $("#back").onclick = closeDetail;
-  $("#edit").onclick = () => openForm(p._id);
-  $("#del").onclick = () => confirmDelete(p._id);
+  if (!DB.readOnly){ $("#edit").onclick = () => openForm(p._id); $("#del").onclick = () => confirmDelete(p._id); }
 }
 
 /* ───────── Alta / edición ───────── */
@@ -668,7 +680,7 @@ function showGate(kind, msg){
 async function start(){
   try{ await DB.connect(); }catch(err){ showGate("error", err.status ? errMsg(err) : (err.message || String(err))); return; }
   $("#who").textContent = DB.user();
-  $("#btnAdd").hidden = false; $("#btnExport").hidden = false; $("#btnOut").hidden = DEMO;
+  $("#btnAdd").hidden = !!DB.readOnly; $("#btnExport").hidden = false; $("#btnOut").hidden = DEMO;
   await reload(true);
   setInterval(() => reload(false), Math.max(10, CFG.refreshSeconds || 30) * 1000);
 }
