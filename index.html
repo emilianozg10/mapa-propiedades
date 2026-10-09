@@ -680,7 +680,7 @@ function showGate(kind, msg){
 async function start(){
   try{ await DB.connect(); }catch(err){ showGate("error", err.status ? errMsg(err) : (err.message || String(err))); return; }
   $("#who").textContent = DB.user();
-  $("#btnAdd").hidden = !!DB.readOnly; $("#btnExport").hidden = false; $("#btnOut").hidden = DEMO;
+  $("#btnAdd").hidden = !!DB.readOnly; $("#btnExport").hidden = false; $("#btnOut").hidden = DEMO || !!DB.readOnly;
   await reload(true);
   setInterval(() => reload(false), Math.max(10, CFG.refreshSeconds || 30) * 1000);
 }
