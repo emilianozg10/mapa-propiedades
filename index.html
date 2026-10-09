@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mapa de Propiedades</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: barra superior con resumen + mapa a pantalla completa con panel lateral (lista ↔ ficha); en teléfono el panel pasa abajo. */
+:root{
+  --bg:#e9eeec; --surface:#ffffff; --surface-2:#f3f6f5; --line:#d3dcd8; --ink:#16211e; --muted:#5a6964;
+  --accent:#1c5a61; --accent-ink:#ffffff; --accent-soft:#dcebec;
+  --ok:#2c7a4b; --ok-soft:#e1f1e7; --vac:#b0542c; --vac-soft:#f6e6dd; --int:#6b7a84; --int-soft:#e7ebee;
+  --warn-soft:#fbf1dc; --warn-ink:#7a5a12; --danger:#b3261e;
+  --shadow:0 8px 28px rgba(18,38,34,.14);
+  --f-ui:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1514; --surface:#151e1d; --surface-2:#1b2625; --line:#2a3836; --ink:#e3ece9; --muted:#93a39e;
+    --accent:#6fb8bf; --accent-ink:#0b1514; --accent-soft:#1d3335;
+    --ok:#5cc38a; --ok-soft:#183126; --vac:#e58a5f; --vac-soft:#3a2219; --int:#9aa9b3; --int-soft:#252f35;
+    --warn-soft:#3a3018; --warn-ink:#e8c46c; --danger:#f2766c;
+    --shadow:0 8px 28px rgba(0,0,0,.5);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1514; --surface:#151e1d; --surface-2:#1b2625; --line:#2a3836; --ink:#e3ece9; --muted:#93a39e;
+  --accent:#6fb8bf; --accent-ink:#0b1514; --accent-soft:#1d3335;
+  --ok:#5cc38a; --ok-soft:#183126; --vac:#e58a5f; --vac-soft:#3a2219; --int:#9aa9b3; --int-soft:#252f35;
+  --warn-soft:#3a3018; --warn-ink:#e8c46c; --danger:#f2766c;
+  --shadow:0 8px 28px rgba(0,0,0,.5);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-ui);overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+.app{height:100%;display:flex;flex-direction:column}
+
+.bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-block:10px;padding-inline:16px;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar h1{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+.stats{display:flex;gap:18px;flex-wrap:wrap}
+.stat{display:flex;flex-direction:column;line-height:1.15}
+.stat b{font-family:var(--f-data);font-weight:500;font-size:15px;font-variant-numeric:tabular-nums}
+.stat span{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.stat.ok b{color:var(--ok)} .stat.vac b{color:var(--vac)}
+.actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.who{font-size:12px;color:var(--muted);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn{height:34px;padding:0 13px;border-radius:7px;border:1px solid var(--line);background:var(--surface-2);display:inline-flex;align-items:center;gap:7px;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--danger)}
+.btn.ghost{background:transparent;border-color:transparent}
+.btn:disabled{opacity:.5;cursor:default}
+.btn svg{width:15px;height:15px;flex:none}
+.demo{background:var(--warn-soft);color:var(--warn-ink);font-size:12.5px;padding-block:6px;padding-inline:16px;border-bottom:1px solid var(--line)}
+
+.main{flex:1;display:flex;min-height:0}
+.mapwrap{flex:1;position:relative;min-width:0}
+#map{position:absolute;inset:0;background:var(--surface-2)}
+.side{width:380px;flex:none;background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+
+.sidehead{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.search{position:relative}
+.search input{width:100%;height:36px;border:1px solid var(--line);background:var(--surface-2);border-radius:7px;padding:0 10px 0 32px}
+.search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--muted)}
+.seg{display:flex;background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:2px}
+.seg button{flex:1;border:0;background:transparent;border-radius:5px;padding:5px 4px;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.list{overflow-y:auto;flex:1}
+.row{display:flex;gap:12px;padding:11px 16px;border:0;border-bottom:1px solid var(--line);cursor:pointer;align-items:center;width:100%;text-align:left;background:none}
+.row:hover{background:var(--surface-2)}
+.thumb{width:52px;height:52px;border-radius:6px;flex:none;background:var(--surface-2) center/cover no-repeat;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.thumb svg{width:20px;height:20px}
+.row .m{flex:1;min-width:0}
+.row .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .s{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .r{text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.ok{color:var(--ok);background:var(--ok-soft)} .pill.vac{color:var(--vac);background:var(--vac-soft)} .pill.int{color:var(--int);background:var(--int-soft)}
+.amt{font-family:var(--f-data);font-size:12.5px;font-variant-numeric:tabular-nums}
+.empty{padding:28px 20px;color:var(--muted);text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
+.empty h3{margin:0;color:var(--ink);font-size:15px}
+.empty p{margin:0;max-width:36ch}
+
+.detail{overflow-y:auto;flex:1;display:flex;flex-direction:column}
+.dtop{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.dtop .sp{flex:1}
+.photo{aspect-ratio:16/10;max-width:100%;background:var(--surface-2) center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:var(--muted);flex:none;border-bottom:1px solid var(--line)}
+.photo .ph{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:13px}
+.photo svg{width:32px;height:32px}
+.dbody{padding:16px;display:flex;flex-direction:column;gap:14px}
+.dtitle h2{margin:0;font-size:19px;line-height:1.25;text-wrap:balance}
+.dtitle .key{font-family:var(--f-data);font-size:12px;color:var(--muted);margin-top:2px}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:0}
+.fields div{background:var(--surface);padding:9px 11px;min-width:0}
+.fields .full{grid-column:1/-1}
+.fields dt{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:2px}
+.fields dd{margin:0;font-weight:500;overflow-wrap:anywhere}
+.fields dd.mono{font-weight:400}
+.aprox{font-size:12.5px;background:var(--warn-soft);color:var(--warn-ink);border-radius:7px;padding:7px 10px}
+.notes h5{margin:0 0 2px;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:500}
+.notes p{margin:0;font-size:13px;white-space:pre-wrap}
+.geo{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.geo a{color:var(--accent);font-weight:600;text-decoration:none}
+.geo a:hover{text-decoration:underline}
+.meta{font-size:11.5px;color:var(--muted)}
+.dfoot{margin-top:auto;padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px}
+.dfoot .btn.primary{flex:1;justify-content:center}
+
+.form .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form .full{grid-column:1/-1}
+.form label{display:block;font-size:12px;color:var(--muted);margin-bottom:3px;font-weight:500}
+.form input,.form select{width:100%;height:36px;border:1px solid var(--line);background:var(--surface-2);border-radius:7px;padding:0 10px}
+.form .hint{font-size:12px;color:var(--muted)}
+.photoedit{display:flex;gap:10px;align-items:center}
+.photoedit .thumb{width:72px;height:56px}
+
+.pin{width:22px;height:22px;border-radius:50%;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45);transition:transform .12s}
+.pin.ok{background:var(--ok)} .pin.vac{background:var(--vac)} .pin.int{background:var(--int)}
+.pin.sel{transform:scale(1.35);box-shadow:0 0 0 3px var(--accent),0 2px 8px rgba(0,0,0,.4)}
+.leaflet-container{font-family:var(--f-ui)}
+.leaflet-tooltip.tip{background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:var(--shadow);font-weight:600;font-size:12.5px;padding:4px 8px}
+.leaflet-tooltip.tip::before{display:none}
+.leaflet-bar a,.leaflet-bar a:hover{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.placing #map{cursor:crosshair}
+.mapui{position:absolute;left:12px;top:12px;z-index:500;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.mapui .seg{background:var(--surface);box-shadow:var(--shadow)}
+.legend{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;display:flex;gap:12px;font-size:12px;box-shadow:var(--shadow)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.banner{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:600;background:var(--ink);color:var(--surface);border-radius:999px;padding:8px 8px 8px 16px;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);font-weight:500;max-width:calc(100% - 32px)}
+.banner .btn{height:28px;background:transparent;color:inherit;border-color:currentColor}
+
+.gate{position:fixed;inset:0;z-index:3000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
+.gate .box{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px;max-width:400px;width:100%;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px}
+.gate h2{margin:0;font-size:18px}
+.gate p{margin:0;color:var(--muted)}
+.gate .err{color:var(--danger);font-size:13px}
+
+.modal{position:fixed;inset:0;z-index:2000;background:rgba(10,20,18,.5);display:flex;align-items:center;justify-content:center;padding:16px}
+.mbox{background:var(--surface);border:1px solid var(--line);border-radius:12px;width:100%;max-width:460px;box-shadow:var(--shadow)}
+.mhead{padding:14px 18px;border-bottom:1px solid var(--line)}
+.mhead h3{margin:0;font-size:16px}
+.mbody{padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+.mbody p{margin:0}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:3500;background:var(--ink);color:var(--surface);padding:9px 16px;border-radius:999px;font-size:13px;font-weight:500;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
+
+@media (max-width:760px){
+  .main{flex-direction:column}
+  .mapwrap{flex:none;height:48%}
+  .side{width:auto;flex:1;border-left:0;border-top:1px solid var(--line)}
+  .stats{gap:14px;order:3;width:100%}
+  .actions .lbl,.who{display:none}
+  .form .grid,.fields{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <h1>Mapa de Propiedades</h1>
+    <div class="stats" id="stats"></div>
+    <div class="actions">
+      <span class="who" id="who"></span>
+      <button class="btn primary" id="btnAdd" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span class="lbl">Agregar</span></button>
+      <button class="btn" id="btnExport" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 0L8 7m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg><span class="lbl">Exportar Excel</span></button>
+      <button class="btn ghost" id="btnOut" type="button" hidden>Salir</button>
+    </div>
+  </header>
+  <div class="demo" id="demo" hidden>Modo demostración: datos ficticios guardados solo en este navegador. Se conecta a SharePoint cuando se configure <span class="mono">config.js</span>.</div>
+  <div class="main">
+    <div class="mapwrap">
+      <div id="map" role="application" aria-label="Mapa de propiedades"></div>
+      <div class="mapui">
+        <div class="seg" role="group" aria-label="Tipo de mapa" id="layers">
+          <button type="button" data-l="calles">Calles</button><button type="button" data-l="satelite">Satélite</button><button type="button" data-l="hibrido">Híbrido</button>
+        </div>
+        <div class="legend"><span><i style="background:var(--ok)"></i>Rentada</span><span><i style="background:var(--vac)"></i>No rentada</span><span><i style="background:var(--int)"></i>Uso interno</span></div>
+      </div>
+      <div class="banner" id="banner" hidden><span id="bannerText"></span><button class="btn" id="bannerCancel" type="button">Cancelar</button></div>
+    </div>
+    <aside class="side" id="side"></aside>
+  </div>
+</div>
+<div class="gate" id="gate" hidden><div class="box" id="gatebox"></div></div>
+<div class="modal" id="modal" hidden><div class="mbox" id="mbox" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.27.0/lib/msal-browser.min.js"></script>
+<script src="config.js"></script>
+<script>
+"use strict";
+const CFG = window.APP_CONFIG || {};
+const DEMO = !CFG.clientId || new URLSearchParams(location.search).has("demo");
+
+/* ───────── Utilidades ───────── */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const norm = s => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim();
+const slug = s => norm(s).replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80);
+const num = v => { if (typeof v === "number") return v; const n = parseFloat(String(v ?? "").replace(/[^0-9.\-]/g,"")); return isFinite(n) ? n : null; };
+const mxn = n => n == null || n === "" ? "—" : "$" + Number(n).toLocaleString("es-MX",{maximumFractionDigits:2});
+const m2 = n => n == null || n === "" ? "—" : Number(n).toLocaleString("es-MX",{maximumFractionDigits:2}) + " m²";
+const pad = n => String(n).padStart(2,"0");
+const fdate = d => `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+const ICON_HOUSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"/></svg>';
+const ICON_SEARCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>';
+const ICON_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+function toast(msg, ms = 2800){ const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(t._h); t._h = setTimeout(() => t.hidden = true, ms); }
+const store = { get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k, v){ try{ localStorage.setItem(k, v); }catch(e){} } };
+
+function antiguedadTxt(v){
+  const s = String(v ?? "").trim(); if (!s) return "—";
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/) || s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m){
+    const d = m[1].length === 4 ? new Date(+m[1], +m[2]-1, +m[3]) : new Date(+m[3], +m[2]-1, +m[1]);
+    const now = new Date(), desde = fdate(d);
+    let meses = (now.getFullYear()-d.getFullYear())*12 + (now.getMonth()-d.getMonth()) - (now.getDate() < d.getDate() ? 1 : 0);
+    if (meses < 0) return `Desde ${desde}`;
+    const a = Math.floor(meses/12), r = meses % 12, parts = [];
+    if (a) parts.push(a + (a === 1 ? " año" : " años")); if (r || !a) parts.push(r + (r === 1 ? " mes" : " meses"));
+    return `${parts.join(" ")} (desde ${desde})`;
+  }
+  return s;
+}
+const isRent = p => p.estatus === "Rentada";
+const stLbl = p => p.estatus === "Rentada" || p.estatus === "Uso interno" ? p.estatus : "No rentada";
+const stCls = p => ({ "Rentada": "ok", "Uso interno": "int" })[p.estatus] || "vac";
+const FILTRO = { r: "Rentada", v: "No rentada", i: "Uso interno" };
+
+/* ───────── Campos: nombre lógico ↔ columna de SharePoint ───────── */
+const FIELDS = {
+  folio: ["Folio", "Title", "Título"], nombre: ["Nombre", "Propiedad"], subarrendador: ["Subarrendador"],
+  predial: ["Predial", "Número predial", "NumeroPredial"], m2: ["M2", "Metros cuadrados", "MetrosCuadrados"],
+  estatus: ["Estatus"], renta: ["Renta", "Monto de la renta"], antiguedad: ["FechaContrato", "Antigüedad", "Antiguedad"],
+  direccion: ["Direccion", "Dirección", "Calle y número"], lat: ["Latitud"], lng: ["Longitud"],
+  precision: ["Precision", "Precisión"], notas: ["Observaciones", "Notas"]
+};
+const NUMERIC = new Set(["m2", "renta", "lat", "lng"]);
+
+/* ───────── Almacén: SharePoint (Graph) o demostración ───────── */
+const GraphStore = {
+  msal: null, account: null, siteId: null, listId: null, driveId: null, cols: {}, colType: {}, photos: new Map(),
+  async init(){
+    this.msal = new msal.PublicClientApplication({
+      auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId || "organizations"}`, redirectUri: location.origin + location.pathname },
+      cache: { cacheLocation: "localStorage" }
+    });
+    await this.msal.initialize();
+    const r = await this.msal.handleRedirectPromise().catch(() => null);
+    this.account = (r && r.account) || this.msal.getAllAccounts()[0] || null;
+    return !!this.account;
+  },
+  inFrame: window.self !== window.top,
+  scopes(){ return ["https://graph.microsoft.com/" + (CFG.graphScope || "Sites.ReadWrite.All")]; },
+  async login(){
+    const req = { scopes: this.scopes(), prompt: "select_account" };
+    if (this.inFrame){ const r = await this.msal.loginPopup(req); this.account = r.account; }
+    else await this.msal.loginRedirect(req);
+  },
+  async logout(){ const a = this.account; this.account = null; if (this.inFrame) await this.msal.logoutPopup({ account: a }); else await this.msal.logoutRedirect({ account: a }); },
+  async token(){
+    try{ return (await this.msal.acquireTokenSilent({ scopes: this.scopes(), account: this.account })).accessToken; }
+    catch(e){
+      if (this.inFrame) return (await this.msal.acquireTokenPopup({ scopes: this.scopes(), account: this.account })).accessToken;
+      await this.msal.acquireTokenRedirect({ scopes: this.scopes(), account: this.account }); throw e;
+    }
+  },
+  async g(path, opt = {}, tries = 3){
+    const url = path.startsWith("http") ? path : "https://graph.microsoft.com/v1.0" + path;
+    const headers = { Authorization: "Bearer " + await this.token(), ...(opt.headers || {}) };
+    if (opt.json !== undefined){ headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(opt.json); }
+    const r = await fetch(url, { method: opt.method || "GET", headers, body: opt.body });
+    if ((r.status === 429 || r.status === 503) && tries > 0){ await new Promise(s => setTimeout(s, (+r.headers.get("Retry-After") || 2) * 1000)); return this.g(path, opt, tries - 1); }
+    if (!r.ok){ let msg = ""; try{ msg = (await r.json()).error.message; }catch(e){} const err = new Error(msg || ("HTTP " + r.status)); err.status = r.status; throw err; }
+    return r.status === 204 ? null : (r.headers.get("content-type") || "").includes("json") ? r.json() : r;
+  },
+  async connect(){
+    const u = new URL(CFG.siteUrl);
+    const site = await this.g(`/sites/${u.hostname}${u.pathname && u.pathname !== "/" ? ":" + u.pathname.replace(/\/$/, "") : ""}`);
+    this.siteId = site.id;
+    const list = await this.g(`/sites/${this.siteId}/lists/${encodeURIComponent(CFG.listName)}`);
+    this.listId = list.id;
+    const cols = (await this.g(`/sites/${this.siteId}/lists/${this.listId}/columns`)).value;
+    for (const [k, names] of Object.entries(FIELDS)){
+      const c = names.map(n => cols.find(c => norm(c.displayName) === norm(n) || norm(c.name) === norm(n))).find(Boolean);
+      if (c){ this.cols[k] = c.name; this.colType[k] = c.number || c.currency ? "number" : "text"; }
+    }
+    try{
+      const drives = (await this.g(`/sites/${this.siteId}/drives`)).value;
+      const d = drives.find(d => norm(d.name) === norm(CFG.photoLibrary)); if (d) this.driveId = d.id;
+    }catch(e){ /* sin biblioteca de fotos */ }
+    if (!this.cols.folio && !this.cols.nombre) throw new Error(`La lista "${CFG.listName}" no tiene columna Folio ni Nombre.`);
+  },
+  canPhotos(){ return !!this.driveId; },
+  async load(){
+    const out = []; let next = `/sites/${this.siteId}/lists/${this.listId}/items?expand=fields&$top=999`;
+    while (next){
+      const r = await this.g(next);
+      for (const it of r.value){
+        const f = it.fields, p = { _id: it.id, _mod: it.lastModifiedDateTime, _by: it.lastModifiedBy && it.lastModifiedBy.user && it.lastModifiedBy.user.displayName };
+        for (const k of Object.keys(FIELDS)) if (this.cols[k]) p[k] = f[this.cols[k]] ?? "";
+        for (const k of NUMERIC) p[k] = num(p[k]);
+        out.push(p);
+      }
+      next = r["@odata.nextLink"] || null;
+    }
+    if (this.driveId){
+      this.photos.clear();
+      let nx = `/drives/${this.driveId}/root/children?$top=999`;
+      while (nx){ const r = await this.g(nx); for (const f of r.value) if (f.file) this.photos.set(f.name.replace(/\.[^.]+$/, "").toLowerCase(), f["@microsoft.graph.downloadUrl"]); nx = r["@odata.nextLink"] || null; }
+    }
+    return out;
+  },
+  body(p){
+    const f = {};
+    for (const k of Object.keys(FIELDS)){
+      if (!this.cols[k] || !(k in p)) continue;
+      let v = p[k]; if (this.colType[k] === "number") v = num(v); else v = v == null ? "" : String(v);
+      f[this.cols[k]] = v;
+    }
+    return f;
+  },
+  async save(p){
+    if (p._id){ await this.g(`/sites/${this.siteId}/lists/${this.listId}/items/${p._id}/fields`, { method: "PATCH", json: this.body(p) }); return p._id; }
+    const r = await this.g(`/sites/${this.siteId}/lists/${this.listId}/items`, { method: "POST", json: { fields: this.body(p) } });
+    return r.id;
+  },
+  async remove(p){ await this.g(`/sites/${this.siteId}/lists/${this.listId}/items/${p._id}`, { method: "DELETE" }); },
+  photoKey(p){ return slug(p.folio || p.nombre); },
+  photoUrl(p){ return this.photos.get(this.photoKey(p)) || null; },
+  async uploadPhoto(p, blob){
+    const name = this.photoKey(p) + ".jpg";
+    const r = await this.g(`/drives/${this.driveId}/root:/${encodeURIComponent(name)}:/content`, { method: "PUT", body: blob, headers: { "Content-Type": "image/jpeg" } });
+    const meta = await this.g(`/drives/${this.driveId}/items/${r.id}`);
+    this.photos.set(this.photoKey(p), meta["@microsoft.graph.downloadUrl"]);
+  },
+  user(){ return this.account ? (this.account.name || this.account.username) : ""; }
+};
+
+const DemoStore = {
+  KEY: "mapa-propiedades-demo", photos: new Map(),
+  async init(){ return true; }, async connect(){}, canPhotos(){ return true; },
+  seed(){
+    const base = [
+      ["DEMO-1","Local Demo Centro","Grupo Ejemplo","00-000-001",120,"Rentada",15000,"15/03/2021","Calle Ejemplo 100, Monterrey, N.L.",25.6866,-100.3161],
+      ["DEMO-2","Casa Demo Mitras","Grupo Ejemplo","00-000-002",210,"No rentada",9000,"","Avenida Prueba 200, Monterrey, N.L.",25.6990,-100.3490],
+      ["DEMO-3","Bodega Demo Norte","Otro Ejemplo","00-000-003",850,"Rentada",42000,"01/07/2019","Carretera Ficticia 300, Monterrey, N.L.",25.7230,-100.3330],
+      ["DEMO-4","Terreno Demo","Grupo Ejemplo","00-000-004",1500,"Uso interno",null,"","Camino de Muestra s/n, Monterrey, N.L.",25.6700,-100.3700]
+    ];
+    return base.map((r, i) => ({ _id: "d" + (i + 1), folio: r[0], nombre: r[1], subarrendador: r[2], predial: r[3], m2: r[4], estatus: r[5], renta: r[6], antiguedad: r[7], direccion: r[8], lat: r[9], lng: r[10], precision: "calle", notas: "Registro ficticio de demostración." }));
+  },
+  read(){ try{ const v = JSON.parse(store.get(this.KEY)); if (Array.isArray(v)) return v; }catch(e){} return this.seed(); },
+  write(a){ store.set(this.KEY, JSON.stringify(a)); },
+  async load(){ return this.read(); },
+  async save(p){ const a = this.read(); if (!p._id) p._id = "d" + Date.now(); const i = a.findIndex(x => x._id === p._id); const c = { ...p, _mod: new Date().toISOString(), _by: "Demostración" }; i >= 0 ? a[i] = c : a.push(c); this.write(a); return p._id; },
+  async remove(p){ this.write(this.read().filter(x => x._id !== p._id)); },
+  photoUrl(p){ return this.photos.get(p._id) || null; },
+  async uploadPhoto(p, blob){ this.photos.set(p._id, URL.createObjectURL(blob)); },
+  user(){ return "Demostración"; }
+};
+const DB = DEMO ? DemoStore : GraphStore;
+
+/* ───────── Estado ───────── */
+const S = { props: new Map(), view: "list", sel: null, q: "", filter: "all", placing: null, draft: null, loaded: false, busy: false };
+
+/* ───────── Mapa ───────── */
+const map = L.map("map", { zoomControl: false, maxZoom: 19, fadeAnimation: false }).setView([25.70, -100.33], 12);
+map.attributionControl.setPrefix(false);
+L.control.zoom({ position: "bottomright" }).addTo(map);
+L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
+new ResizeObserver(() => map.invalidateSize()).observe(document.getElementById("map"));
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
+const satUrl = CFG.azureMapsKey
+  ? `https://atlas.microsoft.com/map/tile?api-version=2024-04-01&tilesetId=microsoft.imagery&zoom={z}&x={x}&y={y}&tileSize=256&subscription-key=${CFG.azureMapsKey}`
+  : ESRI + "World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const satAttr = CFG.azureMapsKey ? "© Microsoft Azure Maps" : "Imágenes © Esri, Maxar, Earthstar Geographics";
+const LAYERS = {
+  calles: [L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' })],
+  satelite: [L.tileLayer(satUrl, { maxZoom: 19, maxNativeZoom: 18, attribution: satAttr })],
+  hibrido: [
+    L.tileLayer(satUrl, { maxZoom: 19, maxNativeZoom: 18, attribution: satAttr }),
+    L.tileLayer(ESRI + "Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, maxNativeZoom: 18 }),
+    L.tileLayer(ESRI + "Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, maxNativeZoom: 18 })
+  ]
+};
+let curLayer = null;
+function setLayer(name){
+  if (!LAYERS[name]) name = "calles";
+  if (curLayer) LAYERS[curLayer].forEach(l => map.removeLayer(l));
+  LAYERS[name].forEach(l => l.addTo(map)); curLayer = name; store.set("mapa-capa", name);
+  document.querySelectorAll("#layers button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.l === name)));
+}
+$("#layers").onclick = e => { const b = e.target.closest("button"); if (b) setLayer(b.dataset.l); };
+setLayer(store.get("mapa-capa") || "calles");
+
+const pinLayer = L.layerGroup().addTo(map);
+function renderPins(list){
+  pinLayer.clearLayers();
+  for (const p of list){
+    if (typeof p.lat !== "number" || typeof p.lng !== "number") continue;
+    const sel = p._id === S.sel;
+    const m = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: "", html: `<div class="pin ${stCls(p)}${sel ? " sel" : ""}"></div>`, iconSize: [22,22], iconAnchor: [11,11] }), zIndexOffset: sel ? 1000 : 0, title: p.nombre || p.folio || "" });
+    m.bindTooltip(esc(p.nombre || p.folio || "Sin nombre"), { className: "tip", direction: "top", offset: [0,-12] });
+    m.on("click", () => openDetail(p._id, false));
+    pinLayer.addLayer(m);
+  }
+}
+let didFit = false;
+function fitAll(){
+  let pts = [...S.props.values()].filter(p => typeof p.lat === "number").map(p => [p.lat, p.lng]);
+  if (pts.length > 3){
+    const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1];
+    const mla = med(pts.map(p => p[0])), mln = med(pts.map(p => p[1]));
+    const near = pts.filter(p => Math.abs(p[0] - mla) < .12 && Math.abs(p[1] - mln) < .12);
+    if (near.length) pts = near;
+  }
+  if (pts.length) map.fitBounds(pts, { padding: [50,50], maxZoom: 16 });
+}
+map.on("click", e => { if (S.placing){ const cb = S.placing; stopPlacing(); cb(e.latlng); } });
+function startPlacing(text, cb){ S.placing = cb; document.body.classList.add("placing"); $("#bannerText").textContent = text; $("#banner").hidden = false; }
+function stopPlacing(){ S.placing = null; document.body.classList.remove("placing"); $("#banner").hidden = true; }
+$("#bannerCancel").onclick = stopPlacing;
+document.addEventListener("keydown", e => { if (e.key === "Escape"){ if (S.placing) stopPlacing(); else closeModal(); } });
+
+/* ───────── Resumen ───────── */
+function renderStats(){
+  const all = [...S.props.values()], r = all.filter(isRent);
+  const renta = r.reduce((a,p) => a + (num(p.renta) || 0), 0);
+  const sup = all.reduce((a,p) => a + (num(p.m2) || 0), 0);
+  $("#stats").innerHTML = !all.length ? "" : `
+    <div class="stat"><b>${all.length}</b><span>Propiedades</span></div>
+    <div class="stat ok"><b>${r.length}</b><span>Rentadas</span></div>
+    <div class="stat vac"><b>${all.filter(p => stLbl(p) === "No rentada").length}</b><span>No rentadas</span></div>
+    <div class="stat"><b>${all.filter(p => p.estatus === "Uso interno").length}</b><span>Uso interno</span></div>
+    <div class="stat"><b>${mxn(renta)}</b><span>Renta mensual</span></div>
+    ${sup ? `<div class="stat"><b>${sup.toLocaleString("es-MX",{maximumFractionDigits:0})} m²</b><span>Superficie</span></div>` : ""}`;
+}
+
+/* ───────── Lista ───────── */
+function visible(){
+  const q = norm(S.q);
+  return [...S.props.values()]
+    .filter(p => S.filter === "all" || stLbl(p) === FILTRO[S.filter])
+    .filter(p => !q || norm([p.nombre,p.folio,p.subarrendador,p.predial,p.direccion].join(" ")).includes(q))
+    .sort((a,b) => String(a.nombre || a.folio || "").localeCompare(String(b.nombre || b.folio || ""), "es", { numeric: true }));
+}
+function thumbStyle(p){ const u = DB.photoUrl(p); return u ? `style="background-image:url('${esc(u)}')"` : ""; }
+function renderList(){
+  const side = $("#side");
+  if (!side.querySelector(".list")){
+    side.innerHTML = `
+      <div class="sidehead">
+        <div class="search">${ICON_SEARCH}<input id="q" type="search" placeholder="Buscar por folio, nombre, subarrendador, predial o calle" aria-label="Buscar"></div>
+        <div class="seg" role="group" aria-label="Filtrar por estatus" id="filters">
+          <button type="button" data-f="all">Todas</button><button type="button" data-f="r">Rentadas</button><button type="button" data-f="v">No rentadas</button><button type="button" data-f="i">Uso interno</button>
+        </div>
+      </div>
+      <div class="list" id="list"></div>`;
+    $("#q").value = S.q;
+    $("#q").oninput = e => { S.q = e.target.value; renderList(); renderPins(visible()); };
+    $("#filters").onclick = e => { const b = e.target.closest("button"); if (!b) return; S.filter = b.dataset.f; renderList(); renderPins(visible()); };
+    $("#list").onclick = e => { const r = e.target.closest(".row"); if (r) openDetail(r.dataset.id, true); };
+  }
+  document.querySelectorAll("#filters button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.f === S.filter)));
+  const list = visible(), el = $("#list");
+  if (!S.loaded){ el.innerHTML = `<div class="empty"><p>Cargando propiedades…</p></div>`; return; }
+  if (!S.props.size){ el.innerHTML = `<div class="empty"><h3>Aún no hay propiedades</h3><p>Agrega la primera con el botón «Agregar» y un clic en el mapa.</p></div>`; return; }
+  if (!list.length){ el.innerHTML = `<div class="empty"><p>Ninguna propiedad coincide con la búsqueda.</p></div>`; return; }
+  el.innerHTML = list.map(p => `
+    <button class="row" type="button" data-id="${esc(p._id)}">
+      <div class="thumb" ${thumbStyle(p)}>${DB.photoUrl(p) ? "" : ICON_HOUSE}</div>
+      <div class="m"><div class="t">${esc(p.nombre || p.folio || "Sin nombre")}</div><div class="s">${esc(p.folio ? p.folio + " · " : "")}${esc(p.direccion || "Sin dirección")}</div></div>
+      <div class="r"><span class="pill ${stCls(p)}">${esc(stLbl(p))}</span>${isRent(p) && p.renta != null ? `<span class="amt">${mxn(p.renta)}</span>` : ""}${typeof p.lat !== "number" ? `<span class="amt" style="color:var(--muted)">Sin pin</span>` : ""}</div>
+    </button>`).join("");
+}
+
+/* ───────── Ficha ───────── */
+function openDetail(id, fly){
+  const p = S.props.get(id); if (!p) return;
+  S.sel = id; S.view = "detail"; renderPins(visible());
+  if (fly && typeof p.lat === "number") map.setView([p.lat, p.lng], Math.max(map.getZoom(), 17), { animate: true });
+  renderDetail();
+}
+function closeDetail(){ S.sel = null; S.view = "list"; $("#side").innerHTML = ""; renderList(); renderPins(visible()); }
+function renderDetail(){
+  const p = S.props.get(S.sel); if (!p){ closeDetail(); return; }
+  const geo = typeof p.lat === "number", foto = DB.photoUrl(p);
+  const mod = p._mod ? `Última modificación: ${fdate(new Date(p._mod))}${p._by ? " por " + esc(p._by) : ""}` : "";
+  $("#side").innerHTML = `
+    <div class="detail">
+      <div class="dtop"><button class="btn ghost" type="button" id="back">${ICON_BACK}Lista</button><span class="sp"></span></div>
+      <div class="photo" ${foto ? `style="background-image:url('${esc(foto)}')"` : ""}>${foto ? "" : `<div class="ph">${ICON_HOUSE}<span>Sin foto</span></div>`}</div>
+      <div class="dbody">
+        <div class="dtitle"><h2>${esc(p.nombre || p.folio || "Sin nombre")}</h2>${p.folio ? `<div class="key">Folio ${esc(p.folio)}</div>` : ""}</div>
+        <dl class="fields">
+          <div class="full"><dt>Subarrendador</dt><dd>${esc(p.subarrendador || "—")}</dd></div>
+          <div><dt>Número predial</dt><dd class="mono">${esc(p.predial || "—")}</dd></div>
+          <div><dt>Metros cuadrados</dt><dd class="mono">${m2(p.m2)}</dd></div>
+          <div><dt>Estatus</dt><dd><span class="pill ${stCls(p)}">${esc(stLbl(p))}</span></dd></div>
+          <div><dt>${isRent(p) ? "Monto de la renta" : "Renta de referencia"}</dt><dd class="mono">${mxn(p.renta)}</dd></div>
+          <div class="full"><dt>Antigüedad del inquilino</dt><dd>${isRent(p) ? esc(antiguedadTxt(p.antiguedad)) : "—"}</dd></div>
+          <div class="full"><dt>Calle y número</dt><dd>${esc(p.direccion || "—")}</dd></div>
+        </dl>
+        ${p.notas ? `<div class="notes"><h5>Observaciones</h5><p>${esc(p.notas)}</p></div>` : ""}
+        ${geo && p.precision && p.precision !== "exacta" ? `<div class="aprox">Ubicación aproximada (a nivel ${esc(p.precision)}). Usa Editar → Mover pin para colocarla exacta.</div>` : ""}
+        <div class="geo">${geo ? `<span class="mono">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</span><a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}" target="_blank" rel="noopener">Google Maps ↗</a>` : "<span>Esta propiedad no tiene pin en el mapa.</span>"}</div>
+        ${mod ? `<div class="meta">${mod}</div>` : ""}
+      </div>
+      <div class="dfoot"><button class="btn primary" type="button" id="edit">Editar</button><button class="btn danger" type="button" id="del">Eliminar</button></div>
+    </div>`;
+  $("#back").onclick = closeDetail;
+  $("#edit").onclick = () => openForm(p._id);
+  $("#del").onclick = () => confirmDelete(p._id);
+}
+
+/* ───────── Alta / edición ───────── */
+function openForm(id, latlng){
+  const p = id ? S.props.get(id) : null;
+  S.view = "form";
+  const d = S.draft = { ...(p || { estatus: "No rentada" }), _file: null };
+  if (latlng){ d.lat = +latlng.lat.toFixed(7); d.lng = +latlng.lng.toFixed(7); d.precision = "exacta"; }
+  const v = k => esc(d[k] ?? "");
+  const foto = p && DB.photoUrl(p);
+  $("#side").innerHTML = `
+    <div class="detail">
+      <div class="dtop"><button class="btn ghost" type="button" id="fcancel">${ICON_BACK}Cancelar</button><span class="sp"></span><strong style="padding-right:8px">${p ? "Editar propiedad" : "Nueva propiedad"}</strong></div>
+      <form class="dbody form" id="pform" autocomplete="off" novalidate>
+        <div class="grid">
+          <div class="full"><label for="f_nombre">Nombre de la propiedad</label><input id="f_nombre" value="${v("nombre")}"></div>
+          <div><label for="f_folio">Folio</label><input id="f_folio" value="${v("folio")}"></div>
+          <div><label for="f_predial">Número predial</label><input id="f_predial" class="mono" value="${v("predial")}"></div>
+          <div class="full"><label for="f_subarrendador">Subarrendador</label><input id="f_subarrendador" value="${v("subarrendador")}"></div>
+          <div class="full"><label for="f_direccion">Calle y número</label><input id="f_direccion" value="${v("direccion")}"></div>
+          <div><label for="f_m2">Metros cuadrados</label><input id="f_m2" inputmode="decimal" class="mono" value="${v("m2")}"></div>
+          <div><label for="f_estatus">Estatus</label><select id="f_estatus">${["Rentada","No rentada","Uso interno"].map(o => `<option${stLbl(d) === o ? " selected" : ""}>${o}</option>`).join("")}</select></div>
+          <div><label for="f_renta">Monto de la renta (MXN)</label><input id="f_renta" inputmode="decimal" class="mono" value="${v("renta")}"></div>
+          <div><label for="f_antiguedad">Inicio del contrato</label><input id="f_antiguedad" placeholder="DD/MM/AAAA" value="${v("antiguedad")}"></div>
+          <div class="full"><label for="f_notas">Observaciones</label><input id="f_notas" value="${v("notas")}"></div>
+        </div>
+        <div>
+          <label>Foto</label>
+          <div class="photoedit"><div class="thumb" id="fthumb" ${foto ? `style="background-image:url('${esc(foto)}')"` : ""}>${foto ? "" : ICON_HOUSE}</div>
+            <div style="display:flex;flex-direction:column;gap:4px">${DB.canPhotos() ? `<button class="btn" type="button" id="fphoto">Elegir foto…</button><input type="file" id="f_foto" accept="image/jpeg,image/png,image/webp" hidden>` : `<span class="hint">Falta la biblioteca «${esc(CFG.photoLibrary)}» en SharePoint.</span>`}<span class="hint" id="fphotoName"></span></div></div>
+        </div>
+        <div>
+          <label>Ubicación</label>
+          <div class="geo"><span class="mono" id="fgeo">${typeof d.lat === "number" ? `${d.lat.toFixed(6)}, ${d.lng.toFixed(6)}` : "Sin pin"}</span><button class="btn" type="button" id="fmove">${typeof d.lat === "number" ? "Mover pin" : "Colocar pin"}</button></div>
+        </div>
+      </form>
+      <div class="dfoot"><button class="btn primary" type="button" id="fsave">Guardar</button></div>
+    </div>`;
+  $("#fcancel").onclick = () => { S.draft = null; p ? openDetail(p._id) : closeDetail(); };
+  $("#fmove").onclick = () => startPlacing("Haz clic en el mapa donde está la propiedad", ll => {
+    d.lat = +ll.lat.toFixed(7); d.lng = +ll.lng.toFixed(7); d.precision = "exacta";
+    $("#fgeo").textContent = `${d.lat.toFixed(6)}, ${d.lng.toFixed(6)}`; $("#fmove").textContent = "Mover pin";
+  });
+  if (DB.canPhotos()){
+    $("#fphoto").onclick = () => $("#f_foto").click();
+    $("#f_foto").onchange = e => { const f = e.target.files[0]; if (!f) return; d._file = f; $("#fthumb").style.backgroundImage = `url('${URL.createObjectURL(f)}')`; $("#fthumb").innerHTML = ""; $("#fphotoName").textContent = f.name; };
+  }
+  $("#pform").onsubmit = e => { e.preventDefault(); save(); };
+  $("#fsave").onclick = save;
+  async function save(){
+    const g = k => $("#f_" + k).value.trim();
+    const rec = { _id: p ? p._id : null, folio: g("folio"), nombre: g("nombre"), subarrendador: g("subarrendador"), predial: g("predial"), direccion: g("direccion"),
+      m2: num(g("m2")), estatus: $("#f_estatus").value, renta: num(g("renta")), antiguedad: g("antiguedad"), notas: g("notas"),
+      lat: typeof d.lat === "number" ? d.lat : null, lng: typeof d.lng === "number" ? d.lng : null, precision: d.precision || "" };
+    if (!rec.nombre && !rec.folio){ toast("Escribe al menos el nombre o el folio."); $("#f_nombre").focus(); return; }
+    const btn = $("#fsave"); btn.disabled = true; btn.textContent = "Guardando…"; S.busy = true;
+    try{
+      rec._id = await DB.save(rec);
+      if (d._file) await DB.uploadPhoto(rec, await shrink(d._file));
+      S.draft = null; S.props.set(rec._id, { ...(p || {}), ...rec, _mod: new Date().toISOString(), _by: DB.user() });
+      toast("Propiedad guardada"); refresh(); openDetail(rec._id, !p);
+    }catch(err){ btn.disabled = false; btn.textContent = "Guardar"; toast(errMsg(err), 5000); }
+    finally{ S.busy = false; }
+  }
+}
+function errMsg(err){
+  const s = err && err.status;
+  if (s === 401 || s === 403) return "No tienes permiso para guardar en la lista de SharePoint. Pide acceso de edición.";
+  if (s === 404) return "No se encontró la lista o la biblioteca en SharePoint. Revisa config.js.";
+  if (s === 413) return "La foto pesa demasiado.";
+  return "No se pudo guardar: " + ((err && err.message) || "error desconocido") + ". Intenta de nuevo.";
+}
+/* Reduce la foto a 1600 px de lado mayor en JPEG. */
+async function shrink(file){
+  try{
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas"); c.width = Math.round(bmp.width*k); c.height = Math.round(bmp.height*k);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise(r => c.toBlob(b => r(b || file), "image/jpeg", .85));
+  }catch(e){ return file; }
+}
+
+/* ───────── Eliminar ───────── */
+function openModal(html){ $("#mbox").innerHTML = html; $("#modal").hidden = false; }
+function closeModal(){ $("#modal").hidden = true; $("#mbox").innerHTML = ""; }
+$("#modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
+function confirmDelete(id){
+  const p = S.props.get(id);
+  openModal(`<div class="mhead"><h3>Eliminar propiedad</h3></div>
+    <div class="mbody"><p>Se eliminará <strong>${esc(p.nombre || p.folio)}</strong> de la lista. ${DEMO ? "" : "SharePoint la conserva en su papelera de reciclaje."}</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" type="button" id="cno">Cancelar</button><button class="btn primary" type="button" id="cyes" style="background:var(--danger);border-color:var(--danger)">Eliminar</button></div></div>`);
+  $("#cno").onclick = closeModal;
+  $("#cyes").onclick = async () => {
+    $("#cyes").disabled = true;
+    try{ await DB.remove(p); S.props.delete(id); closeModal(); closeDetail(); refresh(); toast("Propiedad eliminada"); }
+    catch(err){ $("#cyes").disabled = false; toast(errMsg(err), 5000); }
+  };
+}
+
+/* ───────── Exportar ───────── */
+$("#btnExport").onclick = () => {
+  const head = ["Folio","Nombre","Subarrendador","Predial","M2","Estatus","Renta","FechaContrato","Direccion","Latitud","Longitud","Precision","Observaciones"];
+  const rows = [...S.props.values()].sort((a,b) => String(a.folio||"").localeCompare(String(b.folio||""), "es", { numeric: true }))
+    .map(p => [p.folio||"", p.nombre||"", p.subarrendador||"", p.predial||"", p.m2 ?? "", p.estatus||"", p.renta ?? "", p.antiguedad||"", p.direccion||"", p.lat ?? "", p.lng ?? "", p.precision||"", p.notas||""]);
+  const ws = XLSX.utils.aoa_to_sheet([head, ...rows]); ws["!cols"] = head.map(() => ({ wch: 18 }));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Propiedades");
+  const d = new Date(); XLSX.writeFile(wb, `propiedades_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.xlsx`);
+};
+
+/* ───────── Carga y actualización periódica ───────── */
+function refresh(){
+  renderStats();
+  if (S.view === "detail") renderDetail(); else if (S.view === "list") renderList();
+  renderPins(visible());
+}
+async function reload(first){
+  if (S.busy || S.view === "form") return;
+  try{
+    const items = await DB.load();
+    S.props = new Map(items.map(p => [p._id, p])); S.loaded = true;
+    refresh();
+    if (first && !didFit){ fitAll(); didFit = true; }
+  }catch(err){ if (first) showGate("error", errMsg(err)); }
+}
+$("#btnAdd").onclick = () => startPlacing("Haz clic en el mapa donde está la nueva propiedad", ll => openForm(null, ll));
+$("#btnOut").onclick = () => DB.logout();
+
+function showGate(kind, msg){
+  $("#gate").hidden = false;
+  if (kind === "login"){
+    $("#gatebox").innerHTML = `<h2>Mapa de Propiedades</h2><p>Inicia sesión con tu cuenta de Microsoft de la empresa para ver y editar las propiedades.</p><button class="btn primary" type="button" id="gl" style="justify-content:center">Iniciar sesión con Microsoft</button>${GraphStore.inFrame ? `<p style="font-size:12.5px">Si no se abre la ventana de inicio de sesión, <a href="${esc(location.href)}" target="_blank" rel="noopener">abre la página en el navegador</a>.</p>` : ""}<div class="err" id="gerr"></div>`;
+    $("#gl").onclick = async () => { try{ await DB.login(); $("#gate").hidden = true; start(); }catch(e){ $("#gerr").textContent = "No se pudo iniciar sesión: " + (e.message || e); } };
+  } else {
+    $("#gatebox").innerHTML = `<h2>No se pudieron cargar los datos</h2><p>${esc(msg)}</p><button class="btn" type="button" onclick="location.reload()">Reintentar</button>`;
+  }
+}
+async function start(){
+  try{ await DB.connect(); }catch(err){ showGate("error", err.status ? errMsg(err) : (err.message || String(err))); return; }
+  $("#who").textContent = DB.user();
+  $("#btnAdd").hidden = false; $("#btnExport").hidden = false; $("#btnOut").hidden = DEMO;
+  await reload(true);
+  setInterval(() => reload(false), Math.max(10, CFG.refreshSeconds || 30) * 1000);
+}
+(async () => {
+  $("#demo").hidden = !DEMO;
+  renderList();
+  try{
+    const ok = await DB.init();
+    if (ok) start(); else showGate("login");
+  }catch(err){ showGate("error", "No se pudo iniciar la autenticación de Microsoft: " + (err.message || err)); }
+})();
+</script>
+</body>
+</html>
