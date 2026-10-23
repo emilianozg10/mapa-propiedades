@@ -8,7 +8,7 @@ Este repositorio contiene **solo el código**. No incluye datos de propiedades; 
 
 - Mapa con capas **Calles** (OpenStreetMap), **Satélite** e **Híbrido**.
 - Pines por estatus: rentada, no rentada, uso interno.
-- Ficha: foto, subarrendador, número predial, m², estatus, renta, antigüedad del inquilino, dirección y observaciones.
+- Ficha: foto, subarrendador, inquilino, número predial, m², estatus, renta, antigüedad del inquilino, dirección y observaciones.
 - Alta, edición, cambio de ubicación del pin, fotos y eliminación.
 - Búsqueda, filtros por estatus, resumen y exportación a Excel.
 - Los cambios de otros usuarios aparecen solos cada 30 segundos.
@@ -40,7 +40,7 @@ Ningún valor de `config.js` es secreto: la aplicación es de tipo SPA y no usa 
 
 Columnas que la página reconoce (por nombre visible):
 
-`Folio` (o Título), `Nombre`, `Subarrendador`, `Predial`, `M2` (número), `Estatus` (Rentada / No rentada / Uso interno), `Renta` (número), `FechaContrato` (texto DD/MM/AAAA), `Direccion`, `Latitud` (número), `Longitud` (número), `Precision`, `Observaciones`.
+`Folio` (o Título), `Nombre`, `Subarrendador`, `Inquilino`, `Predial`, `M2` (número), `Estatus` (Rentada / No rentada / Uso interno), `Renta` (número), `FechaContrato` (texto DD/MM/AAAA), `Direccion`, `Latitud` (número), `Longitud` (número), `Precision`, `Observaciones`.
 
 Se puede crear con **Nueva lista → Desde CSV** usando un archivo con esos encabezados.
 
