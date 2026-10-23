@@ -16,6 +16,9 @@ window.APP_CONFIG = {
   // Permiso de Microsoft Graph. Si TI usa el permiso restringido a un sitio, cambiar a "Sites.Selected".
   graphScope: "Sites.ReadWrite.All",
 
+  // API de la base de datos en Cloudflare (tiene prioridad sobre dataUrl)
+  apiUrl: "/api",
+
   // Archivo de datos publicado con la página (se usa mientras no haya conexión a SharePoint)
   dataUrl: "datos.json",
 

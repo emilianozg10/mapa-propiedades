@@ -208,8 +208,9 @@ button{cursor:pointer}
 "use strict";
 const CFG = window.APP_CONFIG || {};
 const QS = new URLSearchParams(location.search);
-const STATIC = !CFG.clientId && !!CFG.dataUrl && !QS.has("demo");
-const DEMO = !CFG.clientId && !STATIC;
+const API = !CFG.clientId && !!CFG.apiUrl && !QS.has("demo");
+const STATIC = !CFG.clientId && !API && !!CFG.dataUrl && !QS.has("demo");
+const DEMO = !CFG.clientId && !STATIC && !API;
 
 /* ───────── Utilidades ───────── */
 const $ = s => document.querySelector(s);
@@ -388,7 +389,28 @@ const StaticStore = {
   photoUrl(p){ return p.foto || null; },
   user(){ return ""; }
 };
-const DB = STATIC ? StaticStore : DEMO ? DemoStore : GraphStore;
+/* Base de datos en Cloudflare (acceso controlado por Cloudflare Access) */
+const ApiStore = {
+  readOnly: true, email: "",
+  async req(path, opt = {}){
+    const r = await fetch(CFG.apiUrl.replace(//$/, "") + path, { credentials: "same-origin", cache: "no-store", ...opt, headers: { "Content-Type": "application/json", ...(opt.headers || {}) } });
+    if (!r.ok){ let m = ""; try{ m = (await r.json()).error; }catch(e){} const err = new Error(m || ("HTTP " + r.status)); err.status = r.status; throw err; }
+    return r.status === 204 ? null : r.json();
+  },
+  async init(){ return true; },
+  async connect(){ const yo = await this.req("/yo"); this.email = yo.email; this.readOnly = !yo.puedeEditar; },
+  canPhotos(){ return false; },
+  async load(){ return this.req("/propiedades"); },
+  async save(p){
+    const body = JSON.stringify(p);
+    if (p._id){ await this.req("/propiedades/" + encodeURIComponent(p._id), { method: "PUT", body }); return p._id; }
+    return (await this.req("/propiedades", { method: "POST", body })).id;
+  },
+  async remove(p){ await this.req("/propiedades/" + encodeURIComponent(p._id), { method: "DELETE" }); },
+  photoUrl(){ return null; },
+  user(){ return this.email + (this.readOnly ? " (consulta)" : ""); }
+};
+const DB = API ? ApiStore : STATIC ? StaticStore : DEMO ? DemoStore : GraphStore;
 
 /* ───────── Estado ───────── */
 const S = { props: new Map(), view: "list", sel: null, q: "", filter: "all", placing: null, draft: null, loaded: false, busy: false };
@@ -609,7 +631,7 @@ function openForm(id, latlng){
 }
 function errMsg(err){
   const s = err && err.status;
-  if (s === 401 || s === 403) return "No tienes permiso para guardar en la lista de SharePoint. Pide acceso de edición.";
+  if (s === 401 || s === 403) return API ? ((err && err.message) || "No tienes permiso para editar.") : "No tienes permiso para guardar en la lista de SharePoint. Pide acceso de edición.";
   if (s === 404) return "No se encontró la lista o la biblioteca en SharePoint. Revisa config.js.";
   if (s === 413) return "La foto pesa demasiado.";
   return "No se pudo guardar: " + ((err && err.message) || "error desconocido") + ". Intenta de nuevo.";

@@ -1,0 +1,14 @@
+# Proyecto de Cloudflare Pages: página estática (dist/) + funciones /api con base de datos D1.
+name = "mapa-propiedades"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mapa-propiedades"
+database_id = "c3d74109-547a-4fe8-ab4d-742f1f6890b5"
+
+[vars]
+# Se llenan al configurar Cloudflare Access (Zero Trust).
+TEAM_DOMAIN = "cool-tooth-3e1e.cloudflareaccess.com"
+POLICY_AUD = "ad7537bac971c3439a2c30bfca2d6cc7384887efd0bc2dde6c6e1926dc202d3b"
