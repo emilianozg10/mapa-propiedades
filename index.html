@@ -393,7 +393,7 @@ const StaticStore = {
 const ApiStore = {
   readOnly: true, email: "",
   async req(path, opt = {}){
-    const r = await fetch(CFG.apiUrl.replace(//$/, "") + path, { credentials: "same-origin", cache: "no-store", ...opt, headers: { "Content-Type": "application/json", ...(opt.headers || {}) } });
+    const r = await fetch(CFG.apiUrl.replace(/\/+$/, "") + path, { credentials: "same-origin", cache: "no-store", ...opt, headers: { "Content-Type": "application/json", ...(opt.headers || {}) } });
     if (!r.ok){ let m = ""; try{ m = (await r.json()).error; }catch(e){} const err = new Error(m || ("HTTP " + r.status)); err.status = r.status; throw err; }
     return r.status === 204 ? null : r.json();
   },
